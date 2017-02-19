@@ -47,7 +47,6 @@ importcBioPortal <- function(tgzfile,
     return(mae)
 }
 
-
 .cbioportal2metadata <- function(file) {
   file <- grep(file, dir(), val=TRUE)
   md <- readLines(file, warn = FALSE)
@@ -164,4 +163,3 @@ importcBioPortal <- function(tgzfile,
     ) %in% cn)
   ifelse(is.gr, ".cbioportal2grl", ".cbioportal2se")
 }
-
