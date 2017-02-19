@@ -24,7 +24,7 @@ importcBioPortal <- function(tgzfile,
         untar(tgzfile, compressed = TRUE)
     fullpaths <-
         dir(path,
-            pattern = "data",
+            pattern = "data.+\\.(txt|seg)$",
             recursive = TRUE,
             full.names = TRUE)
     setwd(dirname(fullpaths)[1])
