@@ -31,6 +31,7 @@ importcBioPortal <- function(tgzfile,
     datafiles <- dir(pattern = "data")
     datafiles = grep("clinical", datafiles, invert = TRUE, value = TRUE)
     exptlist <- lapply(datafiles, function(file) {
+        message(paste0("Working on: ", file))
         fun <- get(.getFUN(file))
         fun(file, split.field=split.field, names.field=names.field)
     })
@@ -81,11 +82,11 @@ importcBioPortal <- function(tgzfile,
            names.field) {
     library(GenomicRanges)
     df <- readr::read_tsv(file, comment = "#")
-    if ("Strand" %in% colnames(df) && 1L %in% df$Strand) {
-      df$Strand <-
-        factor(df$Strand,
-               levels = c(-1, 1),
-               labels = c("-", "+"))
+    if ("Strand" %in% colnames(df) && 1L %in% df$Strand){
+        newstrand <- rep("*", nrow(df))
+        newstrand[df$Strand %in% 1L] <- "+"
+        newstrand[df$Strand %in% -1L] <- "-"
+        df$Strand <- newstrand
     }
     forbidden <-
       c(
@@ -103,6 +104,8 @@ importcBioPortal <- function(tgzfile,
     df <- df[,!colnames(df) %in% forbidden]
     split.field <-
       split.field[split.field %in% colnames(df)]
+    if(grepl("\\.seg$", file))
+        split.field <- colnames(df)[1]
     if (length(split.field) == 0)
       stop("No valid sample identifiers found")
     if (length(split.field) > 1) {
@@ -121,8 +124,8 @@ importcBioPortal <- function(tgzfile,
       df,
       split.field = split.field,
       names.field = names.field,
-      start.field = c("Start_Position", "loc.start"),
-      end.field = c("End_Position", "loc.end"),
+      start.field = c("Start_Position", "loc.start", "Start"),
+      end.field = c("End_Position", "loc.end", "End"),
       seqnames.field = c("Chromosome", "chrom"),
       strand.field = "Strand",
       keep.extra.columns = TRUE
