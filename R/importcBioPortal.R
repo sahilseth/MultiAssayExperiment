@@ -19,6 +19,7 @@ importcBioPortal <- function(tgzfile,
                              names.field = c("Hugo_Symbol", "Entrez_Gene_Id"))
 {
     orig.dir <- getwd()
+    setwd(dirname(tgzfile))
     path <- sub(".tar.gz", "", basename(tgzfile), fixed = TRUE)
     if(!dir.exists(path))
         untar(tgzfile, compressed = TRUE)
