@@ -2,27 +2,6 @@
 ### MultiAssayExperiment constructor
 ### ----------------------------------------------
 
-.generateMap <- function(pData, experiments) {
-    samps <- colnames(experiments)
-    assay <- factor(rep(names(samps), lengths(samps)), levels=names(samps))
-    colname <- unlist(samps, use.names=FALSE)
-    matches <- match(colname, rownames(pData))
-    if (length(matches) && all(is.na(matches)))
-        stop("no way to map pData to ExperimentList")
-    primary <- rownames(pData)[matches]
-    autoMap <- S4Vectors::DataFrame(
-        assay=assay, primary=primary, colname=colname)
-
-    if (nrow(autoMap) && any(is.na(autoMap[["primary"]]))) {
-        notFound <- autoMap[is.na(autoMap[["primary"]]), ]
-        warning("Data from rows:",
-                sprintf("\n %s - %s", notFound[, 2], notFound[, 3]),
-                "\ndropped due to missing phenotype data")
-        autoMap <- autoMap[!is.na(autoMap[["primary"]]), ]
-    }
-    autoMap
-}
-
 .harmonize <- function(experiments, pData, sampleMap) {
     harmony <- character()
     ## sampleMap assays agree with experiment names
@@ -93,8 +72,8 @@
 
 #' Construct a \code{MultiAssayExperiment} object
 #'
-#' This is the constructor function for the \link{MultiAssayExperiment-class}.
-#' It combines multiple data elements from the different hierarchies of data
+#' The constructor function for the \link{MultiAssayExperiment-class} combines
+#' multiple data elements from the different hierarchies of data
 #' (study, experiments, and samples). It can create instances where neither
 #' a \code{sampleMap} or a \code{pData} set is provided. Please see the
 #' MultiAssayExperiment API documentation for more information by running the
@@ -107,7 +86,7 @@
 #' @param sampleMap A \code{DataFrame} or \code{data.frame} of assay names,
 #' sample identifiers, and colname samples
 #' @param metadata An optional argument of "ANY" class (usually list) for
-#' content describing the overall experiments.
+#' content describing the experiments
 #' @param drops A \code{list} of unmatched information
 #' (included after subsetting)
 #' @return A \code{MultiAssayExperiment} object that can store
@@ -128,7 +107,6 @@ MultiAssayExperiment <-
             experiments <- ExperimentList()
         else
             experiments <- ExperimentList(experiments)
-
 
         if (missing(pData)){
             allsamps <- unique(unlist(unname(colnames(experiments))))
@@ -162,7 +140,6 @@ MultiAssayExperiment <-
         ## experiments <- ExperimentList(Map(function(x, y) {
         ##     x[, y]
         ## }, experiments, validAssays))
-
 
         newMultiAssay <- new("MultiAssayExperiment",
                              ExperimentList = bliss[["experiments"]],

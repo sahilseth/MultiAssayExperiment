@@ -7,6 +7,27 @@
 #' @importFrom tidyr gather
 NULL
 
+.generateMap <- function(pData, experiments) {
+    samps <- colnames(experiments)
+    assay <- factor(rep(names(samps), lengths(samps)), levels=names(samps))
+    colname <- unlist(samps, use.names=FALSE)
+    matches <- match(colname, rownames(pData))
+    if (length(matches) && all(is.na(matches)))
+        stop("no way to map pData to ExperimentList")
+    primary <- rownames(pData)[matches]
+    autoMap <- S4Vectors::DataFrame(
+        assay=assay, primary=primary, colname=colname)
+
+    if (nrow(autoMap) && any(is.na(autoMap[["primary"]]))) {
+        notFound <- autoMap[is.na(autoMap[["primary"]]), ]
+        warning("Data from rows:",
+                sprintf("\n %s - %s", notFound[, 2], notFound[, 3]),
+                "\ndropped due to missing phenotype data")
+        autoMap <- autoMap[!is.na(autoMap[["primary"]]), ]
+    }
+    autoMap
+}
+
 ### - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ### Getters
 ###
@@ -28,10 +49,9 @@ setMethod("dimnames", "MultiAssayExperiment", function(x) {
 .DollarNames.MultiAssayExperiment <- function(x, pattern = "")
     grep(pattern, names(pData(x)), value = TRUE)
 
-#' @describeIn MultiAssayExperiment Access pData column
 #' @aliases $,MultiAssayExperiment-method
-#' @param name pData column name
 #' @exportMethod $
+#' @rdname MultiAssayExperiment-methods
 setMethod("$", "MultiAssayExperiment", function(x, name) {
     pData(x)[[name]]
 })
@@ -51,84 +71,6 @@ setMethod("$", "MultiAssayExperiment", function(x, name) {
     )
 }
 
-#' Find hits by class type
-#'
-#' Submethod used for searching hits from given arguments by class dispatch.
-#' This method is employed by \link{subsetByRow}.
-#'
-#' @param subject Any valid element from the
-#' \code{\linkS4class{ExperimentList}} class as well as a
-#' \link{MultiAssayExperiment}
-#' @param query Either a \code{character} vector or
-#' \code{\linkS4class{GRanges}} object used to search by name or ranges
-#' @param ... Additional arguments to \link{findOverlaps} in IRanges
-#' @return Names of matched queries
-#' @example inst/scripts/getHits-Ex.R
-#' @seealso \link{subsetByOverlaps} in the \code{IRanges} package
-setGeneric("getHits", function(subject, query, ...) standardGeneric("getHits"))
-
-#' @describeIn getHits Find all matching
-#' rownames by \code{character}
-#' @exportMethod getHits
-setMethod("getHits", signature("MultiAssayExperiment", "character"),
-          function(subject, query, ...)
-              lapply(experiments(subject), FUN = function(elem, ...) {
-                  getHits(elem, query, ...)
-              })
-)
-
-#' @describeIn getHits Find all matching
-#' rownames by \code{GRanges}
-setMethod("getHits", signature("MultiAssayExperiment", "GRanges"),
-          function(subject, query, ...)
-              lapply(experiments(subject), FUN = function(elem, ...) {
-                  getHits(elem, query, ...)
-              })
-)
-
-#' @describeIn getHits Find all matching rownames for
-#' range-based objects
-setMethod("getHits", signature("ANY", "GRanges"),
-          function(subject, query, ...) {
-            if (is(subject, "RangedSummarizedExperiment"))
-                subject <- rowRanges(subject)
-            if (is(subject, "GRanges"))
-                return(names(subject)[queryHits(findOverlaps(subject,
-                                                             query, ...))])
-            if (is(subject, "VcfStack"))
-                return(intersect(seqnames(seqinfo(subject)),
-                                 as.character(seqnames(query))))
-            if (.checkFindOverlaps(class(subject))) {
-              lapply(subject, function(x) {
-                names(x)[queryHits(
-                  findOverlaps(query = x, subject = query, ...))]
-              })
-            } else {
-              character(0L)
-            }
-          })
-
-#' @describeIn getHits Find all matching rownames based
-#' on \code{character} query
-setMethod("getHits", signature("ANY", "character"),
-          function(subject, query, ...) {
-            query[query %in% rownames(subject)]
-          })
-
-#' @describeIn RangedRaggedAssay Find matching features by \code{character}
-#' in a \code{RangedRaggedAssay}
-#' @param subject A \code{RangedRaggedAssay} class object
-#' @param query A \code{character} class for searching hits
-setMethod("getHits", signature("RangedRaggedAssay", "character"),
-          function(subject, query, ...) {
-            RowNames <- names(unlist(subject, use.names = FALSE))
-            if (any(RowNames %in% query)) {
-              rownames(subject[relist(RowNames %in% query, subject)])
-            } else {
-              character(0L)
-            }
-          })
-
 .isEmpty <- function(object) {
     isTRUE(unname(dim(object)[1]) == 0L || unname(dim(object)[2]) == 0L)
 }
@@ -141,7 +83,10 @@ setMethod("getHits", signature("RangedRaggedAssay", "character"),
         x <- subsetByAssay(x, k)
     }
     if (!missing(j)) {
-        x <- subsetByColumn(x, j)
+        if (is(j, "list") || is(j, "List"))
+            x <- subsetByColumn(x, j)
+        else
+            x <- subsetBypData(x, j)
     }
     if (!missing(i)) {
         x <- subsetByRow(x, i, ...)
@@ -222,16 +167,14 @@ setMethod("subsetByAssay", c("MultiAssayExperiment", "ANY"), function(x, y) {
     return(x)
 })
 
-#' @describeIn MultiAssayExperiment Extract the \link{ExperimentList} element
 #' @export
+#' @rdname MultiAssayExperiment-methods
 setMethod("[[", "MultiAssayExperiment", function(x, i, j, ...) {
     experiments(x)[[i]]
 })
 
-#' @describeIn MultiAssayExperiment Replace the \link{ExperimentList} element
-#' with a supported class (should have documented dimensions
-#' in \code{sampleMap})
 #' @export
+#' @rdname MultiAssayExperiment-methods
 setReplaceMethod("[[", "MultiAssayExperiment", function(x, i, j, ..., value) {
                          if (!missing(j) || length(list(...)) > 0)
                              stop("invalid replacement")
@@ -253,15 +196,14 @@ setReplaceMethod("[[", "MultiAssayExperiment", function(x, i, j, ..., value) {
     assayMap[positions, ]
 }
 
-#' Subset \code{MultiAssayExperiment} object
+#' Subset \code{MultiAssayExperiment} object by \code{pData} rows
 #'
-#' \code{subsetByColumn} returns a subsetted
-#' \code{\linkS4class{MultiAssayExperiment}} object
+#' Select biological units in a \code{MultiAssayExperiment} with
+#' \code{subsetBypData}
 #'
-#' @param x A \code{\link{MultiAssayExperiment}} object
+#' @param x A \code{MultiAssayExperiment} object
 #' @param y Either a \code{numeric}, \code{character} or
-#' \code{logical} object indicating what rownames in the pData to select
-#' for subsetting
+#' \code{logical} object indicating what \code{pData} rows to select
 #' @return A \code{\link{MultiAssayExperiment}} object
 #'
 #' @examples
@@ -269,21 +211,21 @@ setReplaceMethod("[[", "MultiAssayExperiment", function(x, i, j, ..., value) {
 #' example("MultiAssayExperiment")
 #'
 #' ## Subset by character vector (Jack)
-#' subsetByColumn(myMultiAssayExperiment, "Jack")
+#' subsetBypData(myMultiAssayExperiment, "Jack")
 #'
 #' ## Subset by numeric index of pData rows (Jack and Bob)
-#' subsetByColumn(myMultiAssayExperiment, c(1, 3))
+#' subsetBypData(myMultiAssayExperiment, c(1, 3))
 #'
 #' ## Subset by logical indicator of pData rows (Jack and Jill)
-#' subsetByColumn(myMultiAssayExperiment, c(TRUE, TRUE, FALSE, FALSE))
+#' subsetBypData(myMultiAssayExperiment, c(TRUE, TRUE, FALSE, FALSE))
 #'
-#' @export subsetByColumn
-setGeneric("subsetByColumn", function(x, y) standardGeneric("subsetByColumn"))
+#' @export subsetBypData
+setGeneric("subsetBypData", function(x, y) standardGeneric("subsetBypData"))
 
-#' @describeIn subsetByColumn Either a \code{numeric} or
+#' @describeIn subsetBypData Either a \code{numeric}, \code{character}, or
 #' \code{logical} vector to apply a column subset of a
 #' \code{MultiAssayExperiment} object
-setMethod("subsetByColumn", c("MultiAssayExperiment", "ANY"), function(x, y) {
+setMethod("subsetBypData", c("MultiAssayExperiment", "ANY"), function(x, y) {
     if (is.logical(y) || is.numeric(y))
         y <- unique(rownames(pData(x))[y])
     selectors <- y[y %in% rownames(pData(x))]
@@ -305,9 +247,9 @@ setMethod("subsetByColumn", c("MultiAssayExperiment", "ANY"), function(x, y) {
     return(x)
 })
 
-#' @describeIn subsetByColumn Use a \code{character}
+#' @describeIn subsetBypData Use a \code{character}
 #' vector for subsetting column names
-setMethod("subsetByColumn", c("MultiAssayExperiment", "character"),
+setMethod("subsetBypData", c("MultiAssayExperiment", "character"),
           function(x, y) {
               y <- unique(y)
               if (!any(rownames(pData(x)) %in% y))
@@ -316,6 +258,31 @@ setMethod("subsetByColumn", c("MultiAssayExperiment", "character"),
                   warning("Not all identifiers found in data")
               callNextMethod(x = x, y = y)
           })
+
+#' Subset \code{MultiAssayExperiment} object
+#'
+#' \code{subsetByColumn} returns a subsetted
+#' \code{\linkS4class{MultiAssayExperiment}} object
+#'
+#' @param x A \code{\link{MultiAssayExperiment}} object
+#' @param y Either a \code{numeric}, \code{character} or
+#' \code{logical} object indicating what rownames in the pData to select
+#' for subsetting
+#' @return A \code{\link{MultiAssayExperiment}} object
+#'
+#' @examples
+#' ## Load a MultiAssayExperiment example
+#' example("MultiAssayExperiment")
+#'
+#' subsetByColumn(myMultiAssayExperiment, list(Affy = 1:2,
+#'                 Methyl450k = c(3,5,2), RNASeqGene = 2:4, CNVgistic = 1))
+#'
+#' subsetWith <- mendoapply(`[`, colnames(myMultiAssayExperiment),
+#'                         MoreArgs = list(1:2))
+#' subsetByColumn(myMultiAssayExperiment, subsetWith)
+#'
+#' @export subsetByColumn
+setGeneric("subsetByColumn", function(x, y) standardGeneric("subsetByColumn"))
 
 #' @describeIn subsetByColumn Use a \code{list} to subset by
 #' colname in a \code{MultiAssayExperiment}
@@ -348,7 +315,29 @@ setMethod("subsetByColumn", c("MultiAssayExperiment", "List"),
               subsetByColumn(x, Y)
           })
 
-setClassUnion("GRangesORcharacter", c("GRanges", "character"))
+.rowIdx <- function(x) {
+    IRanges::IntegerList(lapply(x, function(exper) seq_len(dim(exper)[[1L]])))
+}
+
+.getHits <- function(expList, i, ...) {
+    IRanges::IntegerList(lapply(expList, function(element) {
+        if (is(i, "Vector")) {
+            if (is(element, "RangedSummarizedExperiment"))
+                element <- rowRanges(element)
+            if (is(element, "VcfStack"))
+                i <- which(rownames(element) %in% as.character(seqnames(i)))
+            if (.checkFindOverlaps(class(element)))
+                i <- IRanges::overlapsAny(element, i, ...)
+            else
+                i <- which(rownames(element) %in% as.character(i))
+        } else if (is.character(i)) {
+            i <- which(rownames(element) %in% i)
+        } else if (!is.logical(i)) {
+            i <- as.integer(i)
+        }
+        i
+    }))
+}
 
 #' Subset \code{MultiAssayExperiment} object by Feature
 #'
@@ -362,7 +351,6 @@ setClassUnion("GRangesORcharacter", c("GRanges", "character"))
 #' primarily when using a \code{GRanges} object for subsetting
 #' (via \code{getHits})
 #' @return A \code{\link{MultiAssayExperiment}} object
-#' @seealso \code{\link{getHits}}
 #'
 #' @examples
 #' ## Load a MultiAssayExperiment example
@@ -382,64 +370,51 @@ setClassUnion("GRangesORcharacter", c("GRanges", "character"))
 setGeneric("subsetByRow", function(x, y, ...)
     standardGeneric("subsetByRow"))
 
-#' @describeIn subsetByRow Use either a
-#' \code{GRanges} or \code{character} to
-#' select the rows for which to subset by
-setMethod("subsetByRow", c("MultiAssayExperiment", "GRangesORcharacter"),
-          function(x, y, ...) {
-            hitList <- getHits(x, y, ...)
-            x[hitList, , , drop = FALSE]
-          })
-
-#' @describeIn subsetByRow Subset a
-#' \code{MultiAssayExperiment} with
-#' \code{GRanges} object
-setMethod("subsetByRow", c("MultiAssayExperiment", "GRanges"),
-          function(x, y, ...) {
-            if (is.null(names(y))) {
-              names(y) <- as.character(y)
-            }
-            callNextMethod(x = x, y = y, ...)
-          })
-
 #' @describeIn subsetByRow Subset a
 #' \code{MultiAssayExperiment} with either a
 #' \code{numeric} or \code{logical} vector
-setMethod("subsetByRow", c("MultiAssayExperiment", "ANY"),
-          function(x, y) {
-              newExperimentList <-
-                  S4Vectors::endoapply(experiments(x),
-                                       function(element) {
-                                           element[y, , drop = FALSE]
-                                       })
-              experiments(x) <- newExperimentList
-              return(x)
-          })
+setMethod("subsetByRow", c("MultiAssayExperiment", "ANY"), function(x, y, ...) {
+    rowIds <- .rowIdx(experiments(x))
+    if (is.integer(y)) {
+        lowerLimit <- min(max(rowIds))
+        if (max(y) > lowerLimit)
+            stop("subscript contains out-of-bounds indices,\n",
+                 " use an ", sQuote("IntegerList"), " index for finer control")
+    }
+    subsetor <- .getHits(experiments(x), y, ...)
+    y <- rowIds[subsetor]
+    subsetByRow(x, y)
+})
 
 #' @describeIn subsetByRow Use a list of equal length as
 #' the \code{ExperimentList} to subset. The order of
 #' the subsetting elements in this list must match that of the
 #' \code{ExperimentList} in the \code{MultiAssayExperiment}.
-setMethod("subsetByRow", c("MultiAssayExperiment", "list"),
-          function(x, y) {
-            if (length(x) != length(y)) {
-              stop("list length must be the same as ExperimentList length")
-            }
-            ## would prefer mendoapply if possible
-            experiments(x) <- ExperimentList(mapply(function(expList, i) {
-              expList[i, , drop =  FALSE]
-            }, expList = experiments(x), i = y, SIMPLIFY = FALSE))
-            return(x)
-          })
+setMethod("subsetByRow", c("MultiAssayExperiment", "list"), function(x, y) {
+    if (length(x) != length(y))
+        stop("List length must be the same as ExperimentList length")
+    if (!identical(names(x), names(y)))
+        stop("List input order much match that of the 'ExperimentList'")
+    y <- as(y, "List")
+    subsetByRow(x, y)
+})
 
 #' @describeIn subsetByRow Use an S4 \code{List} to subset
 #' a \code{MultiAssayExperiment}. The order of the subsetting elements in
 #' this \code{List} must match that of the \code{ExperimentList} in the
 #' \code{MultiAssayExperiment}.
-setMethod("subsetByRow", c("MultiAssayExperiment", "List"), function(x, y)
-{
-    Y <- as.list(y)
-    subsetByRow(x, Y)
+setMethod("subsetByRow", c("MultiAssayExperiment", "List"), function(x, y) {
+    if (is(y, "DataFrame"))
+        stop("Provide a list of indices for subsetting")
+    if (is(y, "CharacterList"))
+        y <- IRanges::IntegerList(mapply(function(expList, char) {
+            which(rownames(expList) %in% char)
+        }, expList = experiments(x), char = y))
+    newExpList <- mendoapply(function(explist, i) {
+        explist[i, , drop = FALSE]
+    }, experiments(x), y)
+    experiments(x) <- newExpList
+    return(x)
 })
 
 #' @exportMethod complete.cases
@@ -566,17 +541,17 @@ setMethod("rearrange", "MultiAssayExperiment", function(object, shape = "long",
     }
     if (shape == "wide") {
         outputDataFrame <- as.data.frame(outputDataFrame)
-        outputDataFrame <- outputDataFrame[,
-                                           -which(names(outputDataFrame) ==
-                                                      "colname")]
-        outputDataFrame <- tidyr::spread(outputDataFrame, key = "assay",
+        outputDataFrame <- tidyr::unite_(outputDataFrame, "feature",
+                                         c("assay", "rowname", "colname"))
+        outputDataFrame <- tidyr::spread(outputDataFrame, key = "feature",
                                          value = "value")
         outputDataFrame <- DataFrame(outputDataFrame)
     }
     return(outputDataFrame)
 })
 
-.combineCols <- function(rectangle, dupNames, combine, vectorized, ...) {
+.combineCols <- function(rectangle, dupNames, combine = IRanges::rowMeans, ...,
+                         vectorized = TRUE) {
     if (!is.logical(vectorized))
         stop("'vectorized' argument not logical")
     if (vectorized)
@@ -614,49 +589,42 @@ setMethod("duplicated", "MultiAssayExperiment",
 #' @param drop.empty.ranges unused generic argument
 #' @param replicates reduce: A list of \linkS4class{LogicalList} indicating
 #' duplicate entries for each biological unit, see the \code{duplicated} method
+#' @param simplify A function for merging repeat measurements in experiments
+#' as indicated by replicates
 #' for \code{MultiAssayExperiment}
-#' @param combine reduce: function for combining replicate columns/samples
-#' (default rowMeans)
-#' @param vectorized reduce: logical (default TRUE) whether the combine function is
-#' vectorized, optimized for working down the vector pairs
 #' @exportMethod reduce
 setMethod("reduce", "MultiAssayExperiment",
-        function(x, drop.empty.ranges = FALSE, replicates = NULL,
-                 combine = rowMeans, vectorized = TRUE, ...) {
-    args <- list(...)
+        function(x, drop.empty.ranges = FALSE, simplify = BiocGenerics::mean,
+                 replicates = NULL, ...) {
     ## Select complete cases
     x <- x[, complete.cases(x), ]
     if (is.null(replicates))
         replicates <- duplicated(x)
-    experimentList <- reduce(x = experiments(x), replicates = replicates,
-                             combine = combine, vectorized = vectorized, ...)
-    rebliss <- .harmonize(experimentList, pData(x), sampleMap(x))
-    do.call(MultiAssayExperiment, rebliss)
+    experimentList <- reduce(x = experiments(x), simplify = simplify,
+                             replicates = replicates, ...)
+    experiments(x) <- experimentList
+    x
 })
 
 #' @describeIn ExperimentList Apply the reduce method on the
 #' ExperimentList elements
 #' @param drop.empty.ranges unused argument
+#' @param simplify A function for merging columns where duplicates are indicated
+#' by replicates
 #' @param replicates reduce: A \code{list} or \linkS4class{LogicalList} where
-#' each element represents a sample and a vector of repeated experiments for
+#' each element represents a sample and a vector of repeated measurements for
 #' the sample (default NULL)
-#' @param combine reduce: A function for consolidating columns in the matrix
-#' representation of the data
-#' @param vectorized reduce: (default TRUE) whether the \code{combine} function
-#' is vectorized, optimized for working down the vector pairs
 #' @param ... Additional arguments. See details for more information.
 setMethod("reduce", "ExperimentList",
-          function(x, drop.empty.ranges = FALSE, replicates = NULL,
-                   combine = rowMeans, vectorized = TRUE, ...) {
+          function(x, drop.empty.ranges = FALSE, simplify,
+                   replicates = NULL, ...) {
               idx <- seq_along(x)
               names(idx) <- names(x)
-              redList <- lapply(idx, function(i, element, replicate,
-                                              combine, vectorized, ...) {
-                  reduce(x = element[[i]], replicates = replicate[[i]],
-                         combine = combine,
-                         vectorized = vectorized, ...)
-              }, element = x, replicate = replicates, combine = combine,
-              vectorized = vectorized, ...)
+              redList <- lapply(idx, function(i, element, simply,
+                                              replicate, ...) {
+                  reduce(x = element[[i]], simplify = simply,
+                         replicates = replicate[[i]], ...)
+              }, element = x, simply = simplify, replicate = replicates, ...)
               ExperimentList(redList)
           })
 
@@ -669,56 +637,55 @@ setMethod("reduce", "ExperimentList",
               list(assayArgs, altArgs)
 }
 
-#' @describeIn MultiAssayExperiment Consolidate columns for rectangular
-#' data structures, mainly matrix
+#' @describeIn MultiAssayExperiment Consolidate duplicate measurements for
+#' rectangular data structures, returns object of the same class (endomorphic)
+#' @importFrom IRanges LogicalList
 setMethod("reduce", "ANY", function(x, drop.empty.ranges = FALSE,
-                                    replicates = NULL, combine = rowMeans,
-                                    vectorized = TRUE, ...) {
-    if (is(x, "SummarizedExperiment"))
+                                    simplify, replicates = NULL, ...) {
+    object <- x
+    if (is.list(replicates))
+        replicates <- IRanges::LogicalList(replicates)
+    if (is(object, "SummarizedExperiment"))
         x <- assay(x)
-    if (is(x, "ExpressionSet"))
+    if (is(object, "ExpressionSet"))
         x <- Biobase::exprs(x)
     if (!is.null(replicates) && length(replicates) != 0L) {
         uniqueCols <- apply(as.matrix(replicates), 2, function(cols) {
             !any(cols)
-            })
-        args <- list(...)
-        argList <- .splitArgs(args)
-        repeatList <- lapply(replicates, function(reps, rectangle,
-                                                  combine, vectorized) {
+        })
+        repeatList <- lapply(replicates, function(reps, rectangle) {
             if (length(reps)) {
                 repNames <- colnames(rectangle)[reps]
-                result <- do.call(.combineCols,
-                                  c(list(rectangle = rectangle,
-                                         dupNames = repNames,
-                                         combine = combine,
-                                         vectorized = vectorized),
-                                    argList[[2L]]))
+                baseList <- as(split(rectangle[, repNames],
+                                     seq_len(nrow(x))), "List")
+                result <- simplify(baseList, ...)
                 result <- matrix(result, ncol = 1,
                                  dimnames = list(NULL, repNames[[1L]]))
                 return(result)
             }
-        }, rectangle = x, combine = combine, vectorized = vectorized)
+        }, rectangle = x)
         uniqueRectangle <- do.call(cbind, unname(repeatList))
-        x <- cbind(uniqueRectangle, x[, uniqueCols, drop = FALSE])
+        result <- cbind(uniqueRectangle, x[, uniqueCols, drop = FALSE])
+        if (is (object, "SummarizedExperiment"))
+            assay(object) <- result
+        else if (is(object, "ExpressionSet"))
+            Biobase::exprs(object) <- result
+        else
+            return(result)
     }
-    return(x)
+    return(object)
 })
 
 #' @describeIn RangedRaggedAssay Use metadata column to produce a matrix which
 #' can then be merged across replicates.
-#' See also: assay,RangedRaggedAssay,missing-method
+#' @seealso \link{assay,RangedRaggedAssay,missing-method}
 #' @param drop.empty.ranges unused argument
+#' @param simplify A function for combining duplicate measurements (e.g., mean)
 #' @param replicates reduce: A logical list where each element represents a
 #' sample and a vector of repeated experiments for the sample (default NULL)
-#' @param combine A function for consolidating columns in the matrix
-#' representation of the data (default rowMeans)
-#' @param vectorized logical (default TRUE) whether the \code{combine} function
-#' is vectorized, optimized for working down the vector pairs
 setMethod("reduce", "RangedRaggedAssay",
-          function(x, drop.empty.ranges = FALSE, replicates = NULL,
-                   combine = rowMeans, vectorized = TRUE, mcolname=NULL,
-                   ...) {
+          function(x, drop.empty.ranges = FALSE, simplify, replicates = NULL,
+                   mcolname=NULL, ...) {
               x <- x[, lengths(x) > 0L ]
               args <- list(...)
               if (is.null(mcolname))
@@ -727,8 +694,69 @@ setMethod("reduce", "RangedRaggedAssay",
               argList <- .splitArgs(args)
               argList[[1L]]$mcolname <- mcolname
               x <- do.call(assay, c(list(x = x), argList[[1L]]))
-              do.call(reduce, c(list(x = x, replicates = replicates,
-                                     combine = combine,
-                                     vectorized = vectorized),
+              do.call(reduce, c(list(x = x, simplify = simplify,
+                                     replicates = replicates),
                                 argList[[2L]]))
           })
+
+#' @describeIn MultiAssayExperiment Add an element to the
+#' \code{ExperimentList} data slot
+#'
+#' @param sampleMap \code{c} method: a \code{sampleMap} \code{list} or
+#' \code{DataFrame} to guide merge
+#' @param mapFrom Either a \code{logical}, \code{character}, or \code{integer}
+#' vector indicating the experiment(s) that have an identical colname order as
+#' the experiment input(s)
+#'
+#' @examples
+#' example("MultiAssayExperiment")
+#'
+#' ## Add an experiment
+#' test1 <- myMultiAssayExperiment[[1L]]
+#' colnames(test1) <- rownames(pData(myMultiAssayExperiment))
+#'
+#' ## Combine current MultiAssayExperiment with additional experiment
+#' ## (no sampleMap)
+#' c(myMultiAssayExperiment, newExperiment = test1)
+#'
+#' test2 <- myMultiAssayExperiment[[1L]]
+#' c(myMultiAssayExperiment, newExp = test2, mapFrom = 3L)
+#'
+#' @importFrom IRanges SplitDataFrameList
+setMethod("c", "MultiAssayExperiment", function(x, ..., sampleMap = NULL,
+                                                mapFrom = NULL) {
+    newExperiments <- list(...)
+    if (!length(newExperiments))
+        stop("No arguments provided")
+    if (is.list(newExperiments[[1L]]) || is(newExperiments[[1L]], "List") &&
+        !is(newExperiments[[1L]], "DataFrame"))
+        newExperiments <- ExperimentList(newExperiments[[1L]])
+    else
+        newExperiments <- ExperimentList(newExperiments)
+    if (is.null(names(newExperiments)))
+        stop("Additional experiments must be named")
+    if (is.null(sampleMap)) {
+        if (!is.null(mapFrom)) {
+            warning("Assuming column order in the data provided ",
+                    "matches the 'mapFrom' experiment(s)")
+            addMaps <- mapToList(sampleMap(x))[mapFrom]
+            names(addMaps) <- names(newExperiments)
+            sampleMap <- mapply(function(x, y) {
+                x[["colname"]] <- colnames(y)
+                return(x)
+            }, addMaps, newExperiments)
+        } else {
+        sampleMap <- .generateMap(pData(x), newExperiments)
+        }
+    }
+    if (is(sampleMap, "DataFrame") || is.data.frame(sampleMap))
+        sampleMap <- mapToList(sampleMap)
+    else if (!is.list(sampleMap))
+        stop("Provided 'sampleMap' must be either a 'DataFrame' or a 'list'")
+    newListMap <- c(mapToList(sampleMap(x)),
+                    IRanges::SplitDataFrameList(sampleMap))
+    sampleMap(x) <- listToMap(newListMap)
+    experiments(x) <- c(experiments(x), newExperiments)
+    validObject(x)
+    return(x)
+})

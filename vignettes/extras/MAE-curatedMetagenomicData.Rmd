@@ -14,13 +14,16 @@ knitr::opts_chunk$set(echo = TRUE)
 Download the data as a list:
 ```{r, cache=FALSE}
 library(curatedMetagenomicData)
-esetlist <- list(taxa = ZellerG_2014.metaphlan_bugs_list.stool()[, 1:10],
-                 pathways = ZellerG_2014.pathabundance_relab.stool())
+curatedMetagenomicData("ZellerG_2014.pathcoverage*|ZellerG_2014.metaphlan*", 
+                       dryrun=TRUE)
+esetlist <- curatedMetagenomicData("ZellerG_2014.pathcoverage*|ZellerG_2014.metaphlan*",
+                                   dryrun=FALSE)
 ## species and strain-level taxa only:
-esetlist$taxa <- esetlist$taxa[grep("s__", rownames(esetlist$taxa)), ]
+#esetlist$ZellerG_2014.metaphlan_bugs_list.stool <- 
+#  esetlist$ZellerG_2014.metaphlan_bugs_list.stool[grep("s__", rownames(esetlist$ZellerG_2014.metaphlan_bugs_list.stool)), ]
 ## eliminate taxa-specific pathway contributions (only total pathway abundances):
-esetlist$pathways <- esetlist$pathways[grep("g__", 
-                                  rownames(esetlist$pathways), invert=TRUE), ]
+#esetlist$pathways <- esetlist$pathways[grep("g__", 
+#                                  rownames(esetlist$pathways), invert=TRUE), ]
 ```
 
 Then create the MultiAssayExperiment:
@@ -31,6 +34,24 @@ mae = MultiAssayExperiment(experiments=esetlist,
 mae
 rownames(mae)
 ```
+
+## Bug-pathway correlations
+
+```{r}
+mae <- reduce(mae)    #ensure identical ordering of columns
+matlist <- assay(mae)
+matlist <- lapply(matlist, t)
+allcors <- cor(matlist[[1]], matlist[[2]])
+dim(allcors)
+allcors[1:5, 1:5]
+library(dplyr)
+x = tidyr::gather(data.frame(allcors))
+x = x[!is.na(x$value), ]
+x = x[abs(x$value) < 1, ]
+xr = rank(-abs(x[, "value"]))
+x[xr <= 5, ]
+```
+
 
 ## CCA with omicade4
 ```{r}

@@ -14,7 +14,6 @@
 \alias{dimnames<-,RangedRaggedAssay,list-method}
 \alias{disjoin,RangedRaggedAssay-method}
 \alias{show,RangedRaggedAssay-method}
-\alias{getHits,RangedRaggedAssay,character-method}
 \alias{reduce,RangedRaggedAssay-method}
 \title{An extension of the GRangesList class}
 \usage{
@@ -28,15 +27,13 @@
 
 \S4method{dimnames}{RangedRaggedAssay,list}(x) <- value
 
-\S4method{disjoin}{RangedRaggedAssay}(x, mcolname = NULL, FUN = mean, ...)
+\S4method{disjoin}{RangedRaggedAssay}(x, mcolname = NULL,
+  simplify = BiocGenerics::mean, ...)
 
 \S4method{show}{RangedRaggedAssay}(object)
 
-\S4method{getHits}{RangedRaggedAssay,character}(subject, query, ...)
-
-\S4method{reduce}{RangedRaggedAssay}(x, drop.empty.ranges = FALSE,
-  replicates = NULL, combine = rowMeans, vectorized = TRUE,
-  mcolname = NULL, ...)
+\S4method{reduce}{RangedRaggedAssay}(x, drop.empty.ranges = FALSE, simplify,
+  replicates = NULL, mcolname = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{\link{RangedRaggedAssay}} class}
@@ -56,24 +53,14 @@ type for selecting columns (\code{\link[GenomicRanges]{GRangesList}} method)}
 \item{mcolname}{A single character string indicating metadata column to use
 for summaries}
 
-\item{FUN}{A function for summarizing non-disjoint ranges (default mean)}
+\item{simplify}{A function for combining duplicate measurements (e.g., mean)}
 
 \item{object}{A \code{RangedRaggedAssay} class object}
-
-\item{subject}{A \code{RangedRaggedAssay} class object}
-
-\item{query}{A \code{character} class for searching hits}
 
 \item{drop.empty.ranges}{unused argument}
 
 \item{replicates}{reduce: A logical list where each element represents a
 sample and a vector of repeated experiments for the sample (default NULL)}
-
-\item{combine}{A function for consolidating columns in the matrix
-representation of the data (default rowMeans)}
-
-\item{vectorized}{logical (default TRUE) whether the \code{combine} function
-is vectorized, optimized for working down the vector pairs}
 }
 \value{
 A \code{\link{RangedRaggedAssay}} class object
@@ -116,12 +103,8 @@ with function
 \item \code{show}: show method for
 the \code{RangedRaggedAssay} class
 
-\item \code{getHits}: Find matching features by \code{character}
-in a \code{RangedRaggedAssay}
-
 \item \code{reduce}: Use metadata column to produce a matrix which
 can then be merged across replicates.
-See also: assay,RangedRaggedAssay,missing-method
 }}
 
 \examples{
@@ -143,4 +126,6 @@ class(matrices)
 }
 \seealso{
 \code{\link[IRanges]{findOverlaps-methods}}
+
+\link{assay,RangedRaggedAssay,missing-method}
 }
