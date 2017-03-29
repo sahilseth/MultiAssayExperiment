@@ -20,15 +20,10 @@ importcBioPortal <- function(tgzfile,
 {
     orig.dir <- getwd()
     setwd(dirname(tgzfile))
-    path <- sub(".tar.gz", "", basename(tgzfile), fixed = TRUE)
-    if(!dir.exists(path))
-        untar(tgzfile, compressed = TRUE)
-    fullpaths <-
-        dir(path,
-            pattern = "data.+\\.(txt|seg)$",
-            recursive = TRUE,
-            full.names = TRUE)
-    setwd(dirname(fullpaths)[1])
+    fullpaths <- untar(tgzfile, list=TRUE)
+    fullpaths <- grep(fullpaths,
+            pattern = "data.+\\.(txt|seg)$", val=TRUE)
+    setwd(unique(dirname(fullpaths)))
     datafiles <- dir(pattern = "data")
     datafiles = grep("clinical", datafiles, invert = TRUE, value = TRUE)
     exptlist <- lapply(datafiles, function(file) {
@@ -38,7 +33,14 @@ importcBioPortal <- function(tgzfile,
     })
     names(exptlist) <-
         sub(".*data_", "", sub("\\.txt", "", basename(datafiles)))
-    pdat <- .cbioportal2clinicaldf("data_clinical.txt")
+    exptlist <- exptlist[!is.null(exptlist)]
+    clindatfile <- grep("clinical", dir(pattern = "data"), val=TRUE)
+    clindatfile <- grep("sample", clindatfile, invert=TRUE, val=TRUE)
+    if(length(clindatfile) > 1){
+        res <- sapply(clindatfile, function(x) ncol(readr::read_tsv(x)))
+        clindatfile <- clindatfile[which.max(res)]
+    }
+    pdat <- .cbioportal2clinicaldf(clindatfile)
     mdat <- .cbioportal2metadata("meta_study.txt")
     setwd(orig.dir)
     library(MultiAssayExperiment)
@@ -71,9 +73,12 @@ importcBioPortal <- function(tgzfile,
   se <-
     SummarizedExperiment(assays = as(df[, numeric.cols], "matrix"),
                                                rowData = rowdat)
+  if(!all(grep("TCGA", rowData(se)[, 1])))
+      return(NULL)
   rownames(se) <- rowData(se)[, 1]
   metadatafile <- sub("data", "meta", file)
-  metadata(se) <- .cbioportal2metadata(metadatafile)
+  if(file.exists(metadatafile))
+    metadata(se) <- .cbioportal2metadata(metadatafile)
   return(se)
 }
 
@@ -83,7 +88,7 @@ importcBioPortal <- function(tgzfile,
            names.field) {
     library(GenomicRanges)
     df <- readr::read_tsv(file, comment = "#")
-    if ("Strand" %in% colnames(df) && 1L %in% df$Strand){
+    if ("Strand" %in% colnames(df) && any(c(1L, -1L) %in% df$Strand)){
         newstrand <- rep("*", nrow(df))
         newstrand[df$Strand %in% 1L] <- "+"
         newstrand[df$Strand %in% -1L] <- "-"
@@ -121,6 +126,8 @@ importcBioPortal <- function(tgzfile,
     } else{
       names.field <- names.field[1]
     }
+    chrom.col <- na.omit(match(c("Chromosome", "chrom"), colnames(df)))
+    df <- df[!is.na(df[[chrom.col]]), ]
     grl <- makeGRangesListFromDataFrame(
       df,
       split.field = split.field,
