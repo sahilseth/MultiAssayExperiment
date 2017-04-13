@@ -48,6 +48,7 @@ Collate:
     'assay-methods.R'
     'clusterOn.R'
     'hasAssay.R'
+    'importcBioPortal.R'
     'listToMap.R'
     'mapToList.R'
     'prepMultiAssay.R'
