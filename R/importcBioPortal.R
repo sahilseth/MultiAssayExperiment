@@ -41,8 +41,8 @@ importcBioPortal <- function(tgzfile,
         res <- sapply(clindatfile, function(x) ncol(readr::read_tsv(x)))
         clindatfile <- clindatfile[which.max(res)]
     }
-    pdat <- .cbioportal2clinicaldf(clindatfile)
-    mdat <- .cbioportal2metadata("meta_study.txt")
+    pdat <- cbioportal2clinicaldf(clindatfile)
+    mdat <- cbioportal2metadata("meta_study.txt")
     setwd(orig.dir)
     library(MultiAssayExperiment)
     mae <-
@@ -52,7 +52,7 @@ importcBioPortal <- function(tgzfile,
     return(mae)
 }
 
-.cbioportal2metadata <- function(file) {
+cbioportal2metadata <- function(file) {
   file <- grep(file, dir(), val=TRUE)
   md <- readLines(file, warn = FALSE)
   mdl <- lapply(seq_along(md), function(i) {
@@ -62,7 +62,7 @@ importcBioPortal <- function(tgzfile,
   return(mdl)
 }
 
-.cbioportal2se <- function(file, ...) {
+cbioportal2se <- function(file, ...) {
   library(SummarizedExperiment)
   df <- readr::read_tsv(file, comment = "#")
   looks.like.cn <- sapply(seq_along(df), function(i) {
@@ -79,11 +79,11 @@ importcBioPortal <- function(tgzfile,
   rownames(se) <- rowData(se)[, 1]
   metadatafile <- sub("data", "meta", file)
   if(file.exists(metadatafile))
-    metadata(se) <- .cbioportal2metadata(metadatafile)
+    metadata(se) <- cbioportal2metadata(metadatafile)
   return(se)
 }
 
-.cbioportal2grl <-
+cbioportal2grl <-
   function(file,
            split.field,
            names.field) {
@@ -143,11 +143,12 @@ importcBioPortal <- function(tgzfile,
       genome(grl) <- df$NCBI_Build[1]
     }
     metadatafile <- sub("data", "meta", file)
-    metadata(grl) <- .cbioportal2metadata(metadatafile)
+    metadata(grl) <- cbioportal2metadata(metadatafile)
+    grl <- RaggedExperiment::RaggedExperiment(grl)
     return(grl)
   }
 
-.cbioportal2clinicaldf <- function(file) {
+cbioportal2clinicaldf <- function(file) {
   clin <- readr::read_tsv(file, comment = "#")
   clinmeta <- readr::read_tsv(file, col_names = FALSE, n_max = 2)
   clinmeta <- t(clinmeta)
@@ -173,5 +174,5 @@ importcBioPortal <- function(tgzfile,
       "chrom",
       "Strand"
     ) %in% cn)
-  ifelse(is.gr, ".cbioportal2grl", ".cbioportal2se")
+  ifelse(is.gr, "cbioportal2grl", "cbioportal2se")
 }
