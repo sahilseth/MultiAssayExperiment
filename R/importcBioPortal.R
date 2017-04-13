@@ -20,6 +20,7 @@ importcBioPortal <- function(tgzfile,
 {
     orig.dir <- getwd()
     setwd(dirname(tgzfile))
+    untar(tgzfile)
     fullpaths <- untar(tgzfile, list=TRUE)
     fullpaths <- grep(fullpaths,
             pattern = "data.+\\.(txt|seg)$", val=TRUE)
@@ -46,7 +47,7 @@ importcBioPortal <- function(tgzfile,
     library(MultiAssayExperiment)
     mae <-
         MultiAssayExperiment(experiments = exptlist,
-                             pData = pdat,
+                             colData = pdat,
                              metadata = mdat)
     return(mae)
 }
