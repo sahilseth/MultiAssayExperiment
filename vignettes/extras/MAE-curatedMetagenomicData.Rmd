@@ -30,7 +30,7 @@ Then create the MultiAssayExperiment:
 ```{r}
 library(MultiAssayExperiment)
 mae = MultiAssayExperiment(experiments=esetlist, 
-                           pData=pData(esetlist[[2]]))
+                           colData=colData(esetlist[[2]]))
 mae
 rownames(mae)
 ```

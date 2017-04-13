@@ -1,3 +1,44 @@
+# MultiAssayExperiment 1.1.49
+
+## New features
+
+* `pData` deprecated in favor of `colData`
+* Quick start vignette now available
+
+## Bug fixes and minor improvements
+
+* Fixed API function link
+* Removed coercion to old `RangedRaggedAssay` class
+* Improved `listToMap`
+
+# MultiAssayExperiment 1.1.44
+
+## Bug fixes and minor improvements
+
+* Renamed `PrepMultiAssay` to `prepMultiAssay` (lower `p` following convention)
+
+# MultiAssayExperiment 1.1.43
+
+## New features
+
+* The `MultiAssayExperiment` quickstart guide vignette added
+* Deprecation of the `RangedRaggedAssay` class. Use `RaggedExperiment` package
+instead.
+* `reduce` function simplified
+* `mapFrom` convenience argument added to the `c,MultiAssayExperiment-method`
+* `assay` and `assays` methods have been revised to conform to 
+`SummarizedExperiment` standards
+
+## Bug fixes and minor improvements
+
+* `API()` now points to the correct web document
+* `ExperimentList` constructor no longer coerces `GRangesList` to `RangedRaggedAssay`
+* Documentation changes: consolidate man pages for `experiments`, `experiments<-`,
+`sampleMap`, and `sampleMap<-`
+* removal of internal `getHits` method, simplified helper function in place
+* `prepMultiAssay` helper now returns a `list` with names corresponding to the
+`MultiAssayExperiment` constructor function
+
 # MultiAssayExperiment 1.1.27
 
 ## New features
