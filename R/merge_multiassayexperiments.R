@@ -1,4 +1,4 @@
-merge_mae <- function(mae1, mae2){
+merge_mae2 <- function(mae1, mae2){
   
   
   # assuming samples are non-overlapping
@@ -31,7 +31,7 @@ merge_mae <- function(mae1, mae2){
 }
 
 expnm = "fc.q.med"
-merge_exps <- function(expnm, mae1, mae2){
+merge_exps2 <- function(expnm, mae1, mae2){
   
   ass1 = experiments(mae1)[[expnm]]
   ass2 = experiments(mae2)[[expnm]]
