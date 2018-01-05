@@ -16,7 +16,7 @@ merge_mae2 <- function(mae1, mae2){
   cmn_exps = intersect(names(experiments(mae1)), names(experiments(mae2)))
   
   # get a list of exps
-  exps = lapply(cmn_exps, merge_exps, mae1, mae2)
+  exps = lapply(cmn_exps, merge_exps2, mae1, mae2)
   names(exps) = cmn_exps
   
   # not sure how to resolve metadata!
