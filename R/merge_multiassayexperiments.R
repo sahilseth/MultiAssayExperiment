@@ -36,10 +36,14 @@ merge_exps2 <- function(expnm, mae1, mae2){
   ass1 = experiments(mae1)[[expnm]]
   ass2 = experiments(mae2)[[expnm]]
   
-  # if both are matrices, simply cbind
-  ass = cbind(ass1, ass2)
+  if(nrow(ass1) == nrow(ass1)){  
+    # if summarized experiment, need to check what to do
+    ass
+    # if both are matrices, simply cbind
+    ass = cbind(ass1, ass2)
+    return(ass)
+   }else{
+    ass = NA
+    }
   
-  # if summarized experiment, need to check what to do
-  
-  ass
 }
